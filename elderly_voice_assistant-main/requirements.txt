@@ -1,0 +1,7 @@
+Flask
+flask-cors
+python-dotenv
+twilio
+yt-dlp
+pyttsx3
+waitress

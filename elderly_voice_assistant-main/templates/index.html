@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Elderly Voice Assistant</title>
+  <script type="module" src="https://unpkg.com/@splinetool/viewer@1.10.33/build/spline-viewer.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background-color: #0f0f20;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: white;
+      text-align: center;
+    }
+    spline-viewer {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+    }
+    .main-content {
+      position: relative;
+      z-index: 1;
+      padding-top: 160px;
+    }
+    h1 { font-size: 32px; margin-bottom: 20px; }
+    button {
+      padding: 12px 30px;
+      font-size: 18px;
+      background-color: #6a0dad;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(106,13,173,0.6);
+      margin: 5px;
+    }
+    #result {
+      margin-top: 30px;
+      font-size: 20px;
+      white-space: pre-line;
+      padding: 0 20px;
+    }
+    #statusBox {
+      margin-top: 20px;
+      padding: 12px;
+      border-radius: 8px;
+      display: inline-block;
+      font-size: 18px;
+    }
+    .success { background-color: rgba(0,255,128,0.1); border: 1px solid #00ff80; }
+    .error { background-color: rgba(255,0,0,0.1); border: 1px solid #ff6666; }
+    .info { background-color: rgba(0,128,255,0.1); border: 1px solid #66ccff; }
+
+    /* kept but not relied on */
+    #playerContainer { display: none; }
+  </style>
+</head>
+
+<body>
+
+<spline-viewer url="https://prod.spline.design/RqoFDATaAdsGVIZJ/scene.splinecode"></spline-viewer>
+
+<div class="main-content">
+  <h1>Welcome to Elderly Voice Assistant</h1>
+  <button onclick="startRecording()">🎙️ Speak Now</button>
+
+  <div id="result">
+    Say something like “help”, “emergency”, or “uthavi venum”
+  </div>
+
+  <div id="statusBox" class="info">Idle</div>
+</div>
+
+<script>
+  let recognition, isRecording = false;
+
+  function speak(text) {
+    const synth = window.speechSynthesis;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-IN";
+    synth.cancel();
+    synth.speak(u);
+  }
+
+  function setStatus(msg, type="info") {
+    const box = document.getElementById("statusBox");
+    box.innerText = msg;
+    box.className = type;
+  }
+
+  function startRecording() {
+    if (isRecording) return;
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SR();
+    recognition.lang = "en-IN";
+    recognition.interimResults = false;
+
+    isRecording = true;
+    setStatus("🎧 Listening...", "info");
+
+    recognition.onresult = e => {
+      const transcript = e.results[0][0].transcript.trim();
+      isRecording = false;
+      recognition.stop();
+
+      document.getElementById("result").innerText =
+        "🗣️ You said: " + transcript;
+
+      sendToBackend(transcript);
+    };
+
+    recognition.onerror = () => {
+      isRecording = false;
+      setStatus("❌ Speech error", "error");
+    };
+
+    recognition.start();
+  }
+
+  
+function sendToBackend(text) {
+
+    // 🔥 If emergency, fetch live location first
+    const emergencyWords = ["help", "emergency", "save me", "danger", "rescue"];
+
+    const isEmergency = emergencyWords.some(w =>
+      text.toLowerCase().includes(w)
+    );
+
+    if (isEmergency && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const locationUrl = `https://maps.google.com/?q=${lat},${lon}`;
+
+          sendRequest(text, locationUrl);
+        },
+        () => {
+          // Location denied or error
+          sendRequest(text, null);
+        }
+      );
+    } else {
+      sendRequest(text, null);
+    }
+  }
+
+  function sendRequest(text, location) {
+    fetch("/voice_input", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: text,
+        location: location
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+
+      if (data.status) {
+        document.getElementById("result").innerText +=
+          "\n🤖 Assistant: " + data.status;
+        speak(data.status);
+      }
+
+      if (data.youtube_url) {
+        setStatus("🎵 Opening YouTube...", "success");
+        window.location.href = data.youtube_url;
+      } else {
+        setStatus("✅ Response received", "success");
+      }
+
+    })
+    .catch(() => setStatus("❌ Backend error", "error"));
+  }
+</script>
+
+</body>
+</html>
